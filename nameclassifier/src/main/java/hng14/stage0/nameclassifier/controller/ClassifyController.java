@@ -6,6 +6,7 @@ import hng14.stage0.nameclassifier.service.ClassifyService;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
+@CrossOrigin(origins = "*")
 @RequestMapping("/api/classify")
 public class ClassifyController {
     private final ClassifyService classifyService;
