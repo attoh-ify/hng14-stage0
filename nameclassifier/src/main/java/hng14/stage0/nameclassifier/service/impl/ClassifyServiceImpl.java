@@ -32,8 +32,8 @@ public class ClassifyServiceImpl implements ClassifyService {
         String trimmedName = name.trim();
 
         if (!trimmedName.matches("^[a-zA-Z]+$")) {
-            log.debug("name must be a valid string");
-            throw new UnprocessableEntityException("name must be a valid string");
+            log.debug("name is not a string");
+            throw new UnprocessableEntityException("name is not a string");
         }
 
         GenderizeResponse genderizeResponse = genderizeClient.classifyName(name);
