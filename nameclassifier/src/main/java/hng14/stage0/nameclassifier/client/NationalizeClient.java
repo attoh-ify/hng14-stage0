@@ -1,6 +1,6 @@
 package hng14.stage0.nameclassifier.client;
 
-import hng14.stage0.nameclassifier.dto.external.GenderizeResponse;
+import hng14.stage0.nameclassifier.dto.external.NationalizeResponse;
 import hng14.stage0.nameclassifier.exception.UpstreamServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,38 +11,38 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 @Component
-public class GenderizeClient {
-    private static final Logger log = LoggerFactory.getLogger(GenderizeClient.class);
+public class NationalizeClient {
+    private static final Logger log = LoggerFactory.getLogger(NationalizeClient.class);
 
     private final RestClient restClient;
 
-    public GenderizeClient(
+    public NationalizeClient(
             RestClient.Builder restClientBuilder,
-            @Value("${genderize.base-url:https://api.genderize.io}") String baseUrl
+            @Value("${nationalize.base-url:https://api.nationalize.io}") String baseUrl
     ) {
         this.restClient = restClientBuilder
                 .baseUrl(baseUrl)
                 .build();
     }
 
-    public GenderizeResponse classifyName(String name) {
+    public NationalizeResponse nationalizeName(String name) {
         try {
-            GenderizeResponse response = restClient.get()
+            NationalizeResponse response = restClient.get()
                     .uri(uriBuilder -> uriBuilder.queryParam("name", name).build())
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (request, clientResponse) -> {
-                        throw new UpstreamServiceException("Genderize returned an invalid response");
+                        throw new UpstreamServiceException("Nationalize returned an invalid response");
                     })
-                    .body(GenderizeResponse.class);
+                    .body(NationalizeResponse.class);
 
             if (response == null) {
-                throw new UpstreamServiceException("Genderize returned an invalid response");
+                throw new UpstreamServiceException("Nationalize returned an invalid response");
             }
 
             return response;
         } catch (RestClientException ex) {
-            log.error("Genderize call failed", ex);
-            throw new UpstreamServiceException("Genderize returned an invalid response");
+            log.error("Nationalize call failed", ex);
+            throw new UpstreamServiceException("Nationalize returned an invalid response");
         }
     }
 }

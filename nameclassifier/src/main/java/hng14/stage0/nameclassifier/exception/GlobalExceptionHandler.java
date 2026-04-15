@@ -1,10 +1,12 @@
 package hng14.stage0.nameclassifier.exception;
 
-import hng14.stage0.nameclassifier.dto.response.ErrorResponse;
+import hng14.stage0.nameclassifier.dto.error.ErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -14,35 +16,47 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ErrorResponse> handleBadRequest(BadRequestException ex) {
-        log.warn("Bad request: {}", ex.getMessage());
+        log.warn("Bad request", ex);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ErrorResponse("error", ex.getMessage()));
-    }
-
-    @ExceptionHandler(NoPredictionException.class)
-    public ResponseEntity<ErrorResponse> handleNoPrediction(NoPredictionException ex) {
-        log.warn("No prediction: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(new ErrorResponse("error", ex.getMessage()));
     }
 
     @ExceptionHandler(UnprocessableEntityException.class)
     public ResponseEntity<ErrorResponse> handleUnprocessableEntity(UnprocessableEntityException ex) {
-        log.warn("Unprocessable entity: {}", ex.getMessage());
+        log.warn("Unprocessable entity", ex);
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(new ErrorResponse("error", ex.getMessage()));
     }
 
     @ExceptionHandler(UpstreamServiceException.class)
     public ResponseEntity<ErrorResponse> handleUpstreamService(UpstreamServiceException ex) {
-        log.warn("Upstream service failure: {}", ex.getMessage());
+        log.warn("Upstream service failure", ex);
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                 .body(new ErrorResponse("error", ex.getMessage()));
     }
 
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException ex) {
+        log.warn("Not found", ex);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("error", "Missing or empty name"));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(new ErrorResponse("error", "Invalid type"));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleException(Exception ex) {
-        log.warn("Unexpected server error: {}", ex.getMessage());
+        log.warn("Unexpected server error", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse("error", "Internal server error"));
     }
