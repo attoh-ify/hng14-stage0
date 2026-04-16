@@ -18,7 +18,7 @@ public class LoggingAspect {
     // The (..) means match any number of arguments
 
     // Defines the pointcut: where the aspect would intervein
-    @Pointcut("execution(* hng14.stage0.nameclassifier.controllers.*.*(..))")
+    @Pointcut("execution(* hng14.stage0.nameclassifier.controller.*.*(..))")
     public void controllerMethods() {}
 
     @Before("controllerMethods()")
