@@ -14,10 +14,10 @@ public class Profile {
     @Column(name = "id", nullable = false, updatable = false)
     private String id;
 
-    @Column(name = "name", nullable = false, unique = true, columnDefinition = "varchar(100)")
+    @Column(name = "name", nullable = false, unique = true)
     private String name;
 
-    @Column(name = "gender", nullable = false, columnDefinition = "varchar(20)")
+    @Column(name = "gender", nullable = false)
     private String gender;
 
     @Column(name = "gender_probability", nullable = false)
@@ -30,16 +30,16 @@ public class Profile {
     private Integer age;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "age_group", nullable = false, columnDefinition = "varchar(20)")
+    @Column(name = "age_group", nullable = false)
     private AgeGroup ageGroup;
 
-    @Column(name = "country_id", nullable = false, columnDefinition = "varchar(20)")
+    @Column(name = "country_id", nullable = false)
     private String countryId;
 
     @Column(name = "country_probability", nullable = false)
     private double countryProbability;
 
-    @Column(name = "created_at", nullable = false, columnDefinition = "varchar(100)")
+    @Column(name = "created_at", nullable = false)
     private String createdAt;
 
     public Profile() {}

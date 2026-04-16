@@ -15,8 +15,8 @@ public interface ProfileRepository extends JpaRepository<Profile, String> {
     Optional<Profile> findByName(String normalizedName);
     @Query("""
         SELECT p FROM Profile p
-        WHERE (:gender IS NULL OR LOWER(p.gender) = LOWER(:gender))
-        AND (:countryId IS NULL OR LOWER(p.countryId) = LOWER(:countryId))
+        WHERE (:gender IS NULL OR p.gender = :gender)
+        AND (:countryId IS NULL OR p.countryId = :countryId)
         AND (:ageGroup IS NULL OR p.ageGroup = :ageGroup)
     """)
     List<Profile> findAllWithFilters(
