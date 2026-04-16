@@ -14,7 +14,7 @@ public class Profile {
     @Column(name = "id", nullable = false, updatable = false)
     private String id;
 
-    @Column(name = "name", nullable = false, unique = true, columnDefinition = "varchar(20)")
+    @Column(name = "name", nullable = false, unique = true, columnDefinition = "varchar(100)")
     private String name;
 
     @Column(name = "gender", nullable = false, columnDefinition = "varchar(20)")
@@ -39,7 +39,7 @@ public class Profile {
     @Column(name = "country_probability", nullable = false)
     private double countryProbability;
 
-    @Column(name = "created_at", nullable = false, columnDefinition = "varchar(20)")
+    @Column(name = "created_at", nullable = false, columnDefinition = "varchar(100)")
     private String createdAt;
 
     public Profile() {}
