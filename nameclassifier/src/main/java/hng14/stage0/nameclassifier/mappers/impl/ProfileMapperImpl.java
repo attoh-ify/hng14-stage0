@@ -16,10 +16,10 @@ public class ProfileMapperImpl implements ProfileMapper {
                 profileDto.name(),
                 profileDto.gender(),
                 profileDto.genderProbability(),
-                profileDto.sampleSize(),
                 profileDto.age(),
                 profileDto.ageGroup(),
                 profileDto.countryId(),
+                profileDto.countryName(),
                 profileDto.countryProbability(),
                 profileDto.createdAt()
         );
@@ -33,10 +33,10 @@ public class ProfileMapperImpl implements ProfileMapper {
                 profile.getName(),
                 profile.getGender(),
                 profile.getGenderProbability(),
-                profile.getSampleSize(),
                 profile.getAge(),
                 profile.getAgeGroup(),
                 profile.getCountryId(),
+                profile.getCountryName(),
                 profile.getCountryProbability(),
                 profile.getCreatedAt()
         );

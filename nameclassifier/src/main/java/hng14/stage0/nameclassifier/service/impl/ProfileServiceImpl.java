@@ -9,8 +9,9 @@ import hng14.stage0.nameclassifier.dto.external.CountryPayload;
 import hng14.stage0.nameclassifier.dto.external.GenderizeResponse;
 import hng14.stage0.nameclassifier.dto.external.NationalizeResponse;
 import hng14.stage0.nameclassifier.dto.payload.CreatePayload;
+import hng14.stage0.nameclassifier.dto.payload.ParsedSearchQuery;
 import hng14.stage0.nameclassifier.dto.response.AgeGroup;
-import hng14.stage0.nameclassifier.dto.response.CompactProfileDto;
+import hng14.stage0.nameclassifier.dto.response.ProfileDto;
 import hng14.stage0.nameclassifier.dto.success.CreateSuccessResponse;
 import hng14.stage0.nameclassifier.dto.success.GetAllSuccessResponse;
 import hng14.stage0.nameclassifier.dto.success.GetSuccessResponse;
@@ -22,14 +23,23 @@ import hng14.stage0.nameclassifier.exception.UpstreamServiceException;
 import hng14.stage0.nameclassifier.mappers.ProfileMapper;
 import hng14.stage0.nameclassifier.repositories.ProfileRepository;
 import hng14.stage0.nameclassifier.service.ProfileService;
+import hng14.stage0.nameclassifier.specifications.ProfileSpecification;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+
+import static hng14.stage0.nameclassifier.utils.Helpers.*;
 
 @Service
 public class ProfileServiceImpl implements ProfileService {
@@ -46,13 +56,6 @@ public class ProfileServiceImpl implements ProfileService {
         this.nationalizeClient = nationalizeClient;
         this.profileRepository = profileRepository;
         this.profileMapper = profileMapper;
-    }
-
-    private AgeGroup resolveAgeGroup(int age) {
-        if (age <= 12) return AgeGroup.child;
-        if (age <= 19) return AgeGroup.teenager;
-        if (age <= 59) return AgeGroup.adult;
-        return AgeGroup.senior;
     }
 
     @Override
@@ -97,17 +100,27 @@ public class ProfileServiceImpl implements ProfileService {
                 .max(Comparator.comparingDouble(CountryPayload::probability))
                 .orElseThrow(() -> new UpstreamServiceException("Nationalize returned an invalid response"));
 
+        String countryName = "";
+        for (Map.Entry<String, String> entry : COUNTRY_MAP.entrySet()) {
+            if (bestCountry.country_id().equals(entry.getValue())) {
+                countryName = entry.getKey();
+            }
+        }
+        if (countryName.isEmpty()) {
+            throw new UpstreamServiceException("Nationalize returned an invalid response");
+        }
+
         Profile newProfile = new Profile(
                 id,
-                normalizedName,
+                trimmedName,
                 genderizeResponse.gender(),
                 genderizeResponse.probability(),
-                genderizeResponse.count(),
                 agifyResponse.age(),
                 ageGroup,
                 bestCountry.country_id(),
+                countryName,
                 bestCountry.probability(),
-                Instant.now().toString()
+                Instant.now()
         );
         profileRepository.save(newProfile);
         return new CreateSuccessResponse("success", null, profileMapper.toDto(newProfile));
@@ -123,31 +136,70 @@ public class ProfileServiceImpl implements ProfileService {
     }
 
     @Override
-    public GetAllSuccessResponse getAll(String gender, String countryId, String ageGroup) {
-        String normalizedGender = (gender == null || gender.isBlank()) ? null : gender.trim().toLowerCase();
-        String normalizedCountryId = (countryId == null || countryId.isBlank()) ? null : countryId.trim().toUpperCase();
+    public GetAllSuccessResponse getAll(
+            String gender,
+            String countryId,
+            String ageGroup,
+            Integer minAge,
+            Integer maxAge,
+            Double minGenderProbability,
+            Double minCountryProbability,
+            String sortBy,
+            String order,
+            Integer page,
+            Integer limit
+    ) {
+        validateQueryParams(minAge, maxAge, minGenderProbability, minCountryProbability, page, limit);
 
-        AgeGroup parsedAgeGroup = null;
+        int resolvedPage = (page == null) ? 1 : page;
+        int resolvedLimit = (limit == null) ? 10 : limit;
 
-        if (ageGroup != null && !ageGroup.isBlank()) {
-            try {
-                parsedAgeGroup = AgeGroup.valueOf(ageGroup.trim().toLowerCase());
-            } catch (Exception e) {
-                throw new UnprocessableEntityException("Invalid age_group");
-            }
-        }
+        Sort sort = buildSort(sortBy, order);
+        Pageable pageable = PageRequest.of(resolvedPage - 1, resolvedLimit, sort);
 
-        List<Profile> profiles = profileRepository.findAllWithFilters(
-                normalizedGender,
-                normalizedCountryId,
-                parsedAgeGroup
+        Specification<Profile> spec = Specification.allOf(
+                ProfileSpecification.hasGender(gender),
+                ProfileSpecification.hasCountryId(countryId),
+                ProfileSpecification.hasAgeGroup(parseAgeGroupParam(ageGroup)),
+                ProfileSpecification.hasMinAge(minAge),
+                ProfileSpecification.hasMaxAge(maxAge),
+                ProfileSpecification.hasMinGenderProbability(minGenderProbability),
+                ProfileSpecification.hasMinCountryProbability(minCountryProbability)
         );
 
-        List<CompactProfileDto> data = profiles.stream()
-                .map(profileMapper::toCompactDto)
+        Page<Profile> result = profileRepository.findAll(spec, pageable);
+
+        List<ProfileDto> data = result.getContent()
+                .stream()
+                .map(profileMapper::toDto)
                 .toList();
 
-        return new GetAllSuccessResponse("success", profiles.size(), data);
+        return new GetAllSuccessResponse(
+                "success",
+                resolvedPage,
+                resolvedLimit,
+                result.getTotalElements(),
+                data
+        );
+    }
+
+    @Override
+    public GetAllSuccessResponse search(String query, Integer page, Integer limit) {
+        ParsedSearchQuery parsed = parse(query);
+
+        return getAll(
+                parsed.gender(),
+                parsed.countryId(),
+                parsed.ageGroup() == null ? null : parsed.ageGroup().name(),
+                parsed.minAge(),
+                parsed.maxAge(),
+                null,
+                null,
+                "created_at",
+                "asc",
+                page,
+                limit
+        );
     }
 
     @Override

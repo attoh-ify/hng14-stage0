@@ -5,6 +5,8 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.Instant;
+
 @Setter
 @Getter
 @Entity
@@ -23,9 +25,6 @@ public class Profile {
     @Column(name = "gender_probability", nullable = false)
     private double genderProbability;
 
-    @Column(name = "sample_size", nullable = false)
-    private long sampleSize;
-
     @Column(name = "age", nullable = false)
     private Integer age;
 
@@ -36,23 +35,26 @@ public class Profile {
     @Column(name = "country_id", nullable = false)
     private String countryId;
 
+    @Column(name = "country_name", nullable = false)
+    private String countryName;
+
     @Column(name = "country_probability", nullable = false)
     private double countryProbability;
 
     @Column(name = "created_at", nullable = false)
-    private String createdAt;
+    private Instant createdAt;
 
     public Profile() {}
 
-    public Profile(String id, String name, String gender, double genderProbability, long sampleSize, Integer age, AgeGroup ageGroup, String countryId, double countryProbability, String createdAt) {
+    public Profile(String id, String name, String gender, double genderProbability, Integer age, AgeGroup ageGroup, String countryId, String countryName, double countryProbability, Instant createdAt) {
         this.id = id;
         this.name = name;
         this.gender = gender;
         this.genderProbability = genderProbability;
-        this.sampleSize = sampleSize;
         this.age = age;
         this.ageGroup = ageGroup;
         this.countryId = countryId;
+        this.countryName = countryName;
         this.countryProbability = countryProbability;
         this.createdAt = createdAt;
     }
@@ -64,10 +66,10 @@ public class Profile {
                 ", name='" + name + '\'' +
                 ", gender='" + gender + '\'' +
                 ", genderProbability=" + genderProbability +
-                ", sampleSize=" + sampleSize +
                 ", age=" + age +
                 ", ageGroup=" + ageGroup +
                 ", countryId='" + countryId + '\'' +
+                ", countryName='" + countryName + '\'' +
                 ", countryProbability=" + countryProbability +
                 ", createdAt='" + createdAt + '\'' +
                 '}';

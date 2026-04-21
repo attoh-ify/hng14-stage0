@@ -40,9 +40,38 @@ public class ProfileController {
     public GetAllSuccessResponse getAll(
             @RequestParam(required = false) String gender,
             @RequestParam(required = false, name = "country_id") String countryId,
-            @RequestParam(required = false, name = "age_group") String ageGroup
+            @RequestParam(required = false, name = "age_group") String ageGroup,
+            @RequestParam(required = false, name = "min_age") Integer minAge,
+            @RequestParam(required = false, name = "max_age") Integer maxAge,
+            @RequestParam(required = false, name = "min_gender_probability") Double minGenderProbability,
+            @RequestParam(required = false, name = "min_country_probability") Double minCountryProbability,
+            @RequestParam(required = false, name = "sort_by") String sortBy,
+            @RequestParam(required = false, name = "order") String order,
+            @RequestParam(defaultValue = "1", name = "page") Integer page,
+            @RequestParam(defaultValue = "10", name = "limit") Integer limit
     ) {
-        return profileService.getAll(gender, countryId, ageGroup);
+        return profileService.getAll(
+                gender,
+                countryId,
+                ageGroup,
+                minAge,
+                maxAge,
+                minGenderProbability,
+                minCountryProbability,
+                sortBy,
+                order,
+                page,
+                limit
+        );
+    }
+
+    @GetMapping("/search")
+    public GetAllSuccessResponse searchProfiles(
+            @RequestParam(name = "q") String query,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer limit
+    ) {
+        return profileService.search(query, page, limit);
     }
 
     @DeleteMapping("/{id}")
