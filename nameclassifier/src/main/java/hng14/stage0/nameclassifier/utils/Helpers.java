@@ -127,18 +127,26 @@ public final class Helpers {
     }
 
     public static String parseGender(String query) {
-        boolean hasMale = query.contains("male") || query.contains("males");
-        boolean hasFemale = query.contains("female") || query.contains("females");
+        if (query == null || query.isBlank()) return null;
 
-        if (hasMale && hasFemale) {
-            return null; // no gender filter when both are mentioned
+        String[] tokens = query.toLowerCase().split("\\W+");
+
+        boolean hasMale = false;
+        boolean hasFemale = false;
+
+        for (String token : tokens) {
+            if (token.equals("male") || token.equals("males")) {
+                hasMale = true;
+            }
+            if (token.equals("female") || token.equals("females")) {
+                hasFemale = true;
+            }
         }
-        if (hasMale) {
-            return "male";
-        }
-        if (hasFemale) {
-            return "female";
-        }
+
+        if (hasMale && hasFemale) return null;
+        if (hasMale) return "male";
+        if (hasFemale) return "female";
+
         return null;
     }
 
@@ -183,12 +191,21 @@ public final class Helpers {
     }
 
     public static String parseCountry(String query) {
-        for (Map.Entry<String, String> entry : COUNTRY_MAP.entrySet()) {
-            if (query.contains("from " + entry.getKey()) || query.contains(entry.getKey())) {
-                return entry.getValue();
-            }
+        if (query == null || query.isBlank()) {
+            return null;
         }
-        return null;
+
+        String normalized = query.toLowerCase();
+        return COUNTRY_MAP.entrySet().stream()
+                .sorted((a, b) -> Integer.compare(b.getKey().length(), a.getKey().length()))
+                .filter(entry -> {
+                        String countryName = java.util.regex.Pattern.quote(entry.getKey().toLowerCase());
+                        return normalized.matches(".*\\bfrom\\s+" + countryName + "\\b.*")
+                                || normalized.matches(".*\\b" + countryName + "\\b.*");
+                        })
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElse(null);
     }
 
     public static boolean isInteger(String value) {
