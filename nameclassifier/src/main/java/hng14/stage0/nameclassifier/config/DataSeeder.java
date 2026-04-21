@@ -3,6 +3,7 @@ package hng14.stage0.nameclassifier.config;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import hng14.stage0.nameclassifier.dto.payload.SeedProfileDto;
+import hng14.stage0.nameclassifier.dto.payload.SeedProfilesWrapper;
 import hng14.stage0.nameclassifier.dto.response.AgeGroup;
 import hng14.stage0.nameclassifier.entities.Profile;
 import hng14.stage0.nameclassifier.repositories.ProfileRepository;
@@ -34,10 +35,12 @@ public class DataSeeder {
                 throw new IllegalStateException("Seed file not found: data/seed_profiles.json");
             }
 
-            List<SeedProfileDto> profiles = objectMapper.readValue(
+            SeedProfilesWrapper wrapper = objectMapper.readValue(
                     inputStream,
-                    new TypeReference<List<SeedProfileDto>>() {}
+                    SeedProfilesWrapper.class
             );
+
+            List<SeedProfileDto> profiles = wrapper.profiles();
 
             List<Profile> entities = profiles.stream()
                     .map(dto -> new Profile(
