@@ -1,7 +1,7 @@
 package hng14.stage0.nameclassifier.config;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.f4b6a3.uuid.UuidCreator;
 import hng14.stage0.nameclassifier.dto.payload.SeedProfileDto;
 import hng14.stage0.nameclassifier.dto.payload.SeedProfilesWrapper;
 import hng14.stage0.nameclassifier.dto.response.AgeGroup;
@@ -44,8 +44,8 @@ public class DataSeeder {
 
             List<Profile> entities = profiles.stream()
                     .map(dto -> new Profile(
-                            dto.id(),
-                            dto.name().toLowerCase(), // consistent with your design
+                            UuidCreator.getTimeOrderedEpoch().toString(),
+                            dto.name(),
                             dto.gender(),
                             dto.gender_probability(),
                             dto.age(),
@@ -53,7 +53,7 @@ public class DataSeeder {
                             dto.country_id(),
                             dto.country_name(),
                             dto.country_probability(),
-                            Instant.parse(dto.created_at())
+                            Instant.now()
                     ))
                     .toList();
 
