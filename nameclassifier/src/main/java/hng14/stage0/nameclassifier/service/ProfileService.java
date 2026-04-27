@@ -23,4 +23,16 @@ public interface ProfileService {
     );
     GetAllSuccessResponse search(String query, Integer page, Integer limit);
     void delete(String profileId);
+    String exportProfiles(
+            String format,
+            String gender,
+            String countryId,
+            String ageGroup,
+            Integer minAge,
+            Integer maxAge,
+            Double minGenderProbability,
+            Double minCountryProbability,
+            String sortBy,
+            String order
+    );
 }

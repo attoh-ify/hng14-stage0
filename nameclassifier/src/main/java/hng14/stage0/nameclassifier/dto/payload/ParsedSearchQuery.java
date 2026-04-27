@@ -1,6 +1,6 @@
 package hng14.stage0.nameclassifier.dto.payload;
 
-import hng14.stage0.nameclassifier.dto.response.AgeGroup;
+import hng14.stage0.nameclassifier.enums.AgeGroup;
 
 public record ParsedSearchQuery(
         String gender,

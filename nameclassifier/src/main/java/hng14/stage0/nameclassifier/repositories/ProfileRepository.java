@@ -9,5 +9,5 @@ import java.util.Optional;
 
 @Repository
 public interface ProfileRepository extends JpaRepository<Profile, String>, JpaSpecificationExecutor<Profile> {
-    Optional<Profile> findByName(String normalizedName);
+    Optional<Profile> findByNameIgnoreCase(String name);
 }

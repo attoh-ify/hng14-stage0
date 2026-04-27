@@ -1,6 +1,6 @@
 package hng14.stage0.nameclassifier.entities;
 
-import hng14.stage0.nameclassifier.dto.response.AgeGroup;
+import hng14.stage0.nameclassifier.enums.AgeGroup;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;

@@ -1,6 +1,7 @@
 package hng14.stage0.nameclassifier.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import hng14.stage0.nameclassifier.enums.AgeGroup;
 
 public record CompactProfileDto(
         String id,

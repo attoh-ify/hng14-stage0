@@ -10,7 +10,8 @@ import hng14.stage0.nameclassifier.dto.external.GenderizeResponse;
 import hng14.stage0.nameclassifier.dto.external.NationalizeResponse;
 import hng14.stage0.nameclassifier.dto.payload.CreatePayload;
 import hng14.stage0.nameclassifier.dto.payload.ParsedSearchQuery;
-import hng14.stage0.nameclassifier.dto.response.AgeGroup;
+import hng14.stage0.nameclassifier.dto.response.PaginationLinks;
+import hng14.stage0.nameclassifier.enums.AgeGroup;
 import hng14.stage0.nameclassifier.dto.response.ProfileDto;
 import hng14.stage0.nameclassifier.dto.success.CreateSuccessResponse;
 import hng14.stage0.nameclassifier.dto.success.GetAllSuccessResponse;
@@ -66,14 +67,12 @@ public class ProfileServiceImpl implements ProfileService {
         }
 
         String trimmedName = payload.name().trim();
-        String normalizedName = payload.name().trim().toLowerCase();
 
-        if (!trimmedName.matches("^[a-zA-Z]+$")) {
-            log.debug("name is not a string");
+        if (!trimmedName.matches("^[a-zA-Z]+(?:\\s+[a-zA-Z]+)*$")) {
             throw new UnprocessableEntityException("name is not a string");
         }
 
-        Optional<Profile> exists = profileRepository.findByName(normalizedName);
+        Optional<Profile> exists = profileRepository.findByNameIgnoreCase(trimmedName);
         if (exists.isPresent()) {
             return new CreateSuccessResponse("success", "Profile already exists", profileMapper.toDto(exists.get()));
         }
@@ -149,6 +148,136 @@ public class ProfileServiceImpl implements ProfileService {
             Integer page,
             Integer limit
     ) {
+        return getAllInternal(
+                "/api/profiles",
+                gender,
+                countryId,
+                ageGroup,
+                minAge,
+                maxAge,
+                minGenderProbability,
+                minCountryProbability,
+                sortBy,
+                order,
+                page,
+                limit
+        );
+    }
+
+    @Override
+    public GetAllSuccessResponse search(String query, Integer page, Integer limit) {
+        ParsedSearchQuery parsed = parse(query);
+
+        return getAllInternal(
+                "/api/profiles/search",
+                parsed.gender(),
+                parsed.countryId(),
+                parsed.ageGroup() == null ? null : parsed.ageGroup().name(),
+                parsed.minAge(),
+                parsed.maxAge(),
+                null,
+                null,
+                "created_at",
+                "asc",
+                page,
+                limit
+        );
+    }
+
+    @Override
+    public void delete(String profileId) {
+        if (!profileRepository.existsById(profileId)) {
+            throw new NotFoundException("Profile not found");
+        }
+        profileRepository.deleteById(profileId);
+    }
+
+    @Override
+    public String exportProfiles(
+            String format,
+            String gender,
+            String countryId,
+            String ageGroup,
+            Integer minAge,
+            Integer maxAge,
+            Double minGenderProbability,
+            Double minCountryProbability,
+            String sortBy,
+            String order
+    ) {
+        if (format == null || !format.equalsIgnoreCase("csv")) {
+            throw new UnprocessableEntityException("Invalid query parameters");
+        }
+
+        validateQueryParams(
+                minAge,
+                maxAge,
+                minGenderProbability,
+                minCountryProbability,
+                null,
+                null
+        );
+
+        Sort sort = buildSort(sortBy, order);
+
+        Specification<Profile> spec = Specification.allOf(
+                ProfileSpecification.hasGender(gender),
+                ProfileSpecification.hasCountryId(countryId),
+                ProfileSpecification.hasAgeGroup(parseAgeGroupParam(ageGroup)),
+                ProfileSpecification.hasMinAge(minAge),
+                ProfileSpecification.hasMaxAge(maxAge),
+                ProfileSpecification.hasMinGenderProbability(minGenderProbability),
+                ProfileSpecification.hasMinCountryProbability(minCountryProbability)
+        );
+
+        List<Profile> profiles = profileRepository.findAll(spec, sort);
+
+        StringBuilder csv = new StringBuilder();
+
+        csv.append("id,name,gender,gender_probability,age,age_group,country_id,country_name,country_probability,created_at\n");
+
+        for (Profile profile : profiles) {
+            csv.append(escapeCsv(profile.getId())).append(",");
+            csv.append(escapeCsv(profile.getName())).append(",");
+            csv.append(escapeCsv(profile.getGender())).append(",");
+            csv.append(profile.getGenderProbability()).append(",");
+            csv.append(profile.getAge()).append(",");
+            csv.append(profile.getAgeGroup()).append(",");
+            csv.append(escapeCsv(profile.getCountryId())).append(",");
+            csv.append(escapeCsv(profile.getCountryName())).append(",");
+            csv.append(profile.getCountryProbability()).append(",");
+            csv.append(profile.getCreatedAt()).append("\n");
+        }
+
+        return csv.toString();
+    }
+
+    private String escapeCsv(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        boolean mustQuote = value.contains(",") || value.contains("\"") || value.contains("\n");
+
+        String escaped = value.replace("\"", "\"\"");
+
+        return mustQuote ? "\"" + escaped + "\"" : escaped;
+    }
+
+    private GetAllSuccessResponse getAllInternal(
+            String basePath,
+            String gender,
+            String countryId,
+            String ageGroup,
+            Integer minAge,
+            Integer maxAge,
+            Double minGenderProbability,
+            Double minCountryProbability,
+            String sortBy,
+            String order,
+            Integer page,
+            Integer limit
+    ) {
         validateQueryParams(minAge, maxAge, minGenderProbability, minCountryProbability, page, limit);
 
         int resolvedPage = (page == null) ? 1 : page;
@@ -174,39 +303,35 @@ public class ProfileServiceImpl implements ProfileService {
                 .map(profileMapper::toDto)
                 .toList();
 
+        PaginationLinks links = buildPaginationLinks(
+                basePath,
+                resolvedPage,
+                resolvedLimit,
+                result.getTotalPages()
+        );
+
         return new GetAllSuccessResponse(
                 "success",
                 resolvedPage,
                 resolvedLimit,
                 result.getTotalElements(),
+                result.getTotalPages(),
+                links,
                 data
         );
     }
 
-    @Override
-    public GetAllSuccessResponse search(String query, Integer page, Integer limit) {
-        ParsedSearchQuery parsed = parse(query);
+    private PaginationLinks buildPaginationLinks(String basePath, int page, int limit, int totalPages) {
+        String self = basePath + "?page=" + page + "&limit=" + limit;
 
-        return getAll(
-                parsed.gender(),
-                parsed.countryId(),
-                parsed.ageGroup() == null ? null : parsed.ageGroup().name(),
-                parsed.minAge(),
-                parsed.maxAge(),
-                null,
-                null,
-                "created_at",
-                "asc",
-                page,
-                limit
-        );
-    }
+        String next = page < totalPages
+                ? basePath + "?page=" + (page + 1) + "&limit=" + limit
+                : null;
 
-    @Override
-    public void delete(String profileId) {
-        if (!profileRepository.existsById(profileId)) {
-            throw new NotFoundException("Profile not found");
-        }
-        profileRepository.deleteById(profileId);
+        String prev = page > 1
+                ? basePath + "?page=" + (page - 1) + "&limit=" + limit
+                : null;
+
+        return new PaginationLinks(self, next, prev);
     }
 }

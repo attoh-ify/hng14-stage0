@@ -1,6 +1,6 @@
 package hng14.stage0.nameclassifier.specifications;
 
-import hng14.stage0.nameclassifier.dto.response.AgeGroup;
+import hng14.stage0.nameclassifier.enums.AgeGroup;
 import hng14.stage0.nameclassifier.entities.Profile;
 import org.springframework.data.jpa.domain.Specification;
 

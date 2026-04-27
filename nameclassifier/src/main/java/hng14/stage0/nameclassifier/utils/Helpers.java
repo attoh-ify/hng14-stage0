@@ -1,9 +1,8 @@
 package hng14.stage0.nameclassifier.utils;
 
 import hng14.stage0.nameclassifier.dto.payload.ParsedSearchQuery;
-import hng14.stage0.nameclassifier.dto.response.AgeGroup;
+import hng14.stage0.nameclassifier.enums.AgeGroup;
 import hng14.stage0.nameclassifier.exception.BadRequestException;
-import hng14.stage0.nameclassifier.exception.NotFoundException;
 import hng14.stage0.nameclassifier.exception.UnprocessableEntityException;
 import org.springframework.data.domain.Sort;
 

@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.f4b6a3.uuid.UuidCreator;
 import hng14.stage0.nameclassifier.dto.payload.SeedProfileDto;
 import hng14.stage0.nameclassifier.dto.payload.SeedProfilesWrapper;
-import hng14.stage0.nameclassifier.dto.response.AgeGroup;
+import hng14.stage0.nameclassifier.enums.AgeGroup;
 import hng14.stage0.nameclassifier.entities.Profile;
 import hng14.stage0.nameclassifier.repositories.ProfileRepository;
 import org.springframework.boot.CommandLineRunner;

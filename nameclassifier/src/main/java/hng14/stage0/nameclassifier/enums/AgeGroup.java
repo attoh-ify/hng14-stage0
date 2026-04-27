@@ -1,4 +1,4 @@
-package hng14.stage0.nameclassifier.dto.response;
+package hng14.stage0.nameclassifier.enums;
 
 public enum AgeGroup {
     child,
