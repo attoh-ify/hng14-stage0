@@ -38,6 +38,10 @@ public class AuthController {
     @Value("${app.web.client.url}")
     private String webClientUrl;
 
+    private boolean isSecure() {
+        return webClientUrl != null && webClientUrl.startsWith("https");
+    }
+
     @GetMapping("/auth/github")
     public ResponseEntity<Void> redirectToGitHub(
             @RequestParam(required = false) String client,
@@ -101,7 +105,7 @@ public class AuthController {
         if (!isCli) {
             ResponseCookie stateCookie = ResponseCookie.from("insighta_oauth_state", finalState)
                     .httpOnly(true)
-                    .secure(false) // true in production HTTPS
+                    .secure(isSecure()) // true in production HTTPS
                     .sameSite("Lax")
                     .path("/")
                     .maxAge(Duration.ofMinutes(10))
@@ -109,7 +113,7 @@ public class AuthController {
 
             ResponseCookie verifierCookie = ResponseCookie.from("insighta_code_verifier", finalCodeVerifier)
                     .httpOnly(true)
-                    .secure(false) // true in production HTTPS
+                    .secure(isSecure()) // true in production HTTPS
                     .sameSite("Lax")
                     .path("/")
                     .maxAge(Duration.ofMinutes(10))
@@ -129,7 +133,6 @@ public class AuthController {
             @CookieValue(name = "insighta_oauth_state", required = false) String expectedState,
             @CookieValue(name = "insighta_code_verifier", required = false) String codeVerifier
     ) {
-        System.out.println("URL: " + webClientUrl + "/dashboard");
         TokenResponse response = authService.handleGitHubCallback(
                 code,
                 state,
@@ -139,7 +142,7 @@ public class AuthController {
 
         ResponseCookie accessCookie = ResponseCookie.from("insighta_access_token", response.accessToken())
                 .httpOnly(true)
-                .secure(false)
+                .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(Duration.ofMinutes(3))
@@ -147,7 +150,7 @@ public class AuthController {
 
         ResponseCookie refreshCookie = ResponseCookie.from("insighta_refresh_token", response.refreshToken())
                 .httpOnly(true)
-                .secure(false)
+                .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(Duration.ofMinutes(5))
@@ -155,7 +158,7 @@ public class AuthController {
 
         ResponseCookie clearStateCookie = ResponseCookie.from("insighta_oauth_state", "")
                 .httpOnly(true)
-                .secure(false)
+                .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(0)
@@ -163,7 +166,7 @@ public class AuthController {
 
         ResponseCookie clearVerifierCookie = ResponseCookie.from("insighta_code_verifier", "")
                 .httpOnly(true)
-                .secure(false)
+                .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(0)
@@ -184,7 +187,7 @@ public class AuthController {
 
         ResponseCookie accessCookie = ResponseCookie.from("insighta_access_token", response.accessToken())
                 .httpOnly(true)
-                .secure(false)
+                .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(Duration.ofMinutes(3))
@@ -192,7 +195,7 @@ public class AuthController {
 
         ResponseCookie refreshCookie = ResponseCookie.from("insighta_refresh_token", response.refreshToken())
                 .httpOnly(true)
-                .secure(false)
+                .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(Duration.ofMinutes(5))
@@ -210,7 +213,7 @@ public class AuthController {
 
         ResponseCookie clearAccessCookie = ResponseCookie.from("insighta_access_token", "")
                 .httpOnly(true)
-                .secure(false)
+                .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(0)
@@ -218,7 +221,7 @@ public class AuthController {
 
         ResponseCookie clearRefreshCookie = ResponseCookie.from("insighta_refresh_token", "")
                 .httpOnly(true)
-                .secure(false)
+                .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(0)
