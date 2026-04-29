@@ -40,15 +40,26 @@ public class AuthController {
     @Value("${app.web.client.url}")
     private String webClientUrl;
 
-    private String getCookieDomain() {
-        if (webClientUrl != null && webClientUrl.contains("railway.app")) {
-            return ".up.railway.app";
-        }
-        return null; // Localhost uses default domain (null)
+    private boolean isProduction() {
+        return webClientUrl != null && webClientUrl.contains("railway.app");
     }
 
-    private boolean isSecure() {
-        return webClientUrl != null && webClientUrl.startsWith("https");
+    private String getCookieDomain() {
+        return isProduction() ? ".up.railway.app" : null;
+    }
+
+    private ResponseCookie buildCookie(String name, String value, Duration maxAge, boolean isOauthHandshake) {
+        String sameSite = isProduction() && isOauthHandshake ? "None" : "Lax";
+        boolean secure = isProduction();
+
+        return ResponseCookie.from(name, value)
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite(sameSite)
+                .path("/")
+                .domain(getCookieDomain())
+                .maxAge(maxAge)
+                .build();
     }
 
     @GetMapping("/auth/github")
@@ -59,33 +70,18 @@ public class AuthController {
             @RequestParam(required = false, name = "code_challenge") String codeChallenge
     ) {
         boolean isCli = "cli".equalsIgnoreCase(client);
-
-        AppProperties.OAuthClient oauthClient = isCli
-                ? appProperties.getCli()
-                : appProperties.getWeb();
+        AppProperties.OAuthClient oauthClient = isCli ? appProperties.getCli() : appProperties.getWeb();
 
         if (oauthClient.getClientId() == null || oauthClient.getClientId().isBlank()) {
             throw new BadRequestException("GitHub OAuth client ID is not configured");
         }
 
-        String finalState;
-        String finalCodeVerifier = null;
-        String finalCodeChallenge;
-        String finalRedirectUri;
+        String finalState, finalCodeVerifier = null, finalCodeChallenge, finalRedirectUri;
 
         if (isCli) {
-            if (redirectUri == null || redirectUri.isBlank()) {
-                throw new BadRequestException("CLI redirect_uri is required");
+            if (redirectUri == null || state == null || codeChallenge == null) {
+                throw new BadRequestException("CLI request missing required PKCE parameters");
             }
-
-            if (state == null || state.isBlank()) {
-                throw new BadRequestException("CLI state is required");
-            }
-
-            if (codeChallenge == null || codeChallenge.isBlank()) {
-                throw new BadRequestException("CLI code_challenge is required");
-            }
-
             finalState = state;
             finalCodeChallenge = codeChallenge;
             finalRedirectUri = redirectUri;
@@ -104,34 +100,15 @@ public class AuthController {
                 .queryParam("state", finalState)
                 .queryParam("code_challenge", finalCodeChallenge)
                 .queryParam("code_challenge_method", "S256")
-                .build()
-                .toUri();
+                .build().toUri();
 
-        ResponseEntity.BodyBuilder response = ResponseEntity
-                .status(HttpStatus.FOUND)
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(HttpStatus.FOUND)
                 .header(HttpHeaders.LOCATION, githubAuthorizeUri.toString());
 
         if (!isCli) {
-            ResponseCookie stateCookie = ResponseCookie.from("insighta_oauth_state", finalState)
-                    .httpOnly(true)
-                    .secure(isSecure()) // true in production HTTPS
-                    .sameSite("Lax")
-                    .path("/")
-                    .domain(getCookieDomain())
-                    .maxAge(Duration.ofMinutes(10))
-                    .build();
-
-            ResponseCookie verifierCookie = ResponseCookie.from("insighta_code_verifier", finalCodeVerifier)
-                    .httpOnly(true)
-                    .secure(isSecure()) // true in production HTTPS
-                    .sameSite("Lax")
-                    .path("/")
-                    .domain(getCookieDomain())
-                    .maxAge(Duration.ofMinutes(10))
-                    .build();
-
-            response.header(HttpHeaders.SET_COOKIE, stateCookie.toString());
-            response.header(HttpHeaders.SET_COOKIE, verifierCookie.toString());
+            // Use isOauthHandshake=true for state and verifier
+            response.header(HttpHeaders.SET_COOKIE, buildCookie("insighta_oauth_state", finalState, Duration.ofMinutes(10), true).toString());
+            response.header(HttpHeaders.SET_COOKIE, buildCookie("insighta_code_verifier", finalCodeVerifier, Duration.ofMinutes(10), true).toString());
         }
 
         return response.build();
@@ -145,61 +122,28 @@ public class AuthController {
             @CookieValue(name = "insighta_code_verifier", required = false) String codeVerifier,
             HttpServletRequest request
     ) {
-        // LOG ALL COOKIES TO SEE WHAT IS ACTUALLY ARRIVING
+        // Debugging logs for production cookie issues
         if (request.getCookies() != null) {
             for (Cookie cookie : request.getCookies()) {
-                System.out.println("Cookie Name: " + cookie.getName() + " | Value: " + cookie.getValue());
+                System.out.println("Inbound Cookie: " + cookie.getName() + " [Domain: " + cookie.getDomain() + "]");
             }
         }
 
-        TokenResponse response = authService.handleGitHubCallback(
-                code,
-                state,
-                expectedState,
-                codeVerifier
-        );
+        TokenResponse response = authService.handleGitHubCallback(code, state, expectedState, codeVerifier);
 
-        ResponseCookie accessCookie = ResponseCookie.from("insighta_access_token", response.accessToken())
-                .httpOnly(true)
-                .secure(isSecure())
-                .sameSite("Lax")
-                .path("/")
-                .domain(getCookieDomain())
-                .maxAge(Duration.ofMinutes(3))
-                .build();
+        // Regular session cookies use Lax
+        ResponseCookie access = buildCookie("insighta_access_token", response.accessToken(), Duration.ofMinutes(3), false);
+        ResponseCookie refresh = buildCookie("insighta_refresh_token", response.refreshToken(), Duration.ofMinutes(5), false);
 
-        ResponseCookie refreshCookie = ResponseCookie.from("insighta_refresh_token", response.refreshToken())
-                .httpOnly(true)
-                .secure(isSecure())
-                .sameSite("Lax")
-                .path("/")
-                .domain(getCookieDomain())
-                .maxAge(Duration.ofMinutes(5))
-                .build();
-
-        ResponseCookie clearStateCookie = ResponseCookie.from("insighta_oauth_state", "")
-                .httpOnly(true)
-                .secure(isSecure())
-                .sameSite("Lax")
-                .path("/")
-                .domain(getCookieDomain())
-                .maxAge(0)
-                .build();
-
-        ResponseCookie clearVerifierCookie = ResponseCookie.from("insighta_code_verifier", "")
-                .httpOnly(true)
-                .secure(isSecure())
-                .sameSite("Lax")
-                .path("/")
-                .domain(getCookieDomain())
-                .maxAge(0)
-                .build();
+        // Cleanup cookies (maxAge 0)
+        ResponseCookie clearState = buildCookie("insighta_oauth_state", "", Duration.ZERO, true);
+        ResponseCookie clearVerifier = buildCookie("insighta_code_verifier", "", Duration.ZERO, true);
 
         return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.SET_COOKIE, accessCookie.toString())
-                .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
-                .header(HttpHeaders.SET_COOKIE, clearStateCookie.toString())
-                .header(HttpHeaders.SET_COOKIE, clearVerifierCookie.toString())
+                .header(HttpHeaders.SET_COOKIE, access.toString())
+                .header(HttpHeaders.SET_COOKIE, refresh.toString())
+                .header(HttpHeaders.SET_COOKIE, clearState.toString())
+                .header(HttpHeaders.SET_COOKIE, clearVerifier.toString())
                 .header(HttpHeaders.LOCATION, webClientUrl + "/dashboard")
                 .build();
     }
@@ -207,92 +151,38 @@ public class AuthController {
     @PostMapping("/auth/refresh")
     public ResponseEntity<TokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         TokenResponse response = authService.refresh(request.refreshToken());
-
-        ResponseCookie accessCookie = ResponseCookie.from("insighta_access_token", response.accessToken())
-                .httpOnly(true)
-                .secure(isSecure())
-                .sameSite("Lax")
-                .path("/")
-                .domain(getCookieDomain())
-                .maxAge(Duration.ofMinutes(3))
-                .build();
-
-        ResponseCookie refreshCookie = ResponseCookie.from("insighta_refresh_token", response.refreshToken())
-                .httpOnly(true)
-                .secure(isSecure())
-                .sameSite("Lax")
-                .path("/")
-                .domain(getCookieDomain())
-                .maxAge(Duration.ofMinutes(5))
-                .build();
-
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, accessCookie.toString())
-                .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
+                .header(HttpHeaders.SET_COOKIE, buildCookie("insighta_access_token", response.accessToken(), Duration.ofMinutes(3), false).toString())
+                .header(HttpHeaders.SET_COOKIE, buildCookie("insighta_refresh_token", response.refreshToken(), Duration.ofMinutes(5), false).toString())
                 .body(response);
     }
 
     @PostMapping("/auth/logout")
     public ResponseEntity<MessageResponse> logout(@Valid @RequestBody LogoutRequest request) {
         MessageResponse response = authService.logout(request.refreshToken());
-
-        ResponseCookie clearAccessCookie = ResponseCookie.from("insighta_access_token", "")
-                .httpOnly(true)
-                .secure(isSecure())
-                .sameSite("Lax")
-                .path("/")
-                .domain(getCookieDomain())
-                .maxAge(0)
-                .build();
-
-        ResponseCookie clearRefreshCookie = ResponseCookie.from("insighta_refresh_token", "")
-                .httpOnly(true)
-                .secure(isSecure())
-                .sameSite("Lax")
-                .path("/")
-                .domain(getCookieDomain())
-                .maxAge(0)
-                .build();
-
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, clearAccessCookie.toString())
-                .header(HttpHeaders.SET_COOKIE, clearRefreshCookie.toString())
+                .header(HttpHeaders.SET_COOKIE, buildCookie("insighta_access_token", "", Duration.ZERO, false).toString())
+                .header(HttpHeaders.SET_COOKIE, buildCookie("insighta_refresh_token", "", Duration.ZERO, false).toString())
                 .body(response);
     }
 
     @PostMapping("/auth/github/cli/callback")
-    public ResponseEntity<TokenResponse> handleGitHubCliCallback(
-            @Valid @RequestBody GitHubCliCallbackRequest request
-    ) {
-        TokenResponse response = authService.handleGitHubCliCallback(
-                request.code(),
-                request.state(),
-                request.codeVerifier(),
-                request.redirectUri()
-        );
-
-        return ResponseEntity.ok(response);
+    public ResponseEntity<TokenResponse> handleGitHubCliCallback(@Valid @RequestBody GitHubCliCallbackRequest request) {
+        return ResponseEntity.ok(authService.handleGitHubCliCallback(request.code(), request.state(), request.codeVerifier(), request.redirectUri()));
     }
 
     @GetMapping("/auth/me")
     public ResponseEntity<?> getCurrentUser() {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!(principal instanceof AppUser user)) throw new ForbiddenException("Unauthorized");
 
-        if (!(principal instanceof AppUser user)) {
-            throw new ForbiddenException("Unauthorized");
-        }
-
-        return ResponseEntity.ok(
-                Map.of(
-                        "id", user.getId(),
-                        "username", user.getUsername(),
-                        "email", user.getEmail() != null ? user.getEmail(): "",
-                        "role", user.getRole(),
-                        "github_id", user.getGithubId(),
-                        "is_active", user.isActive(),
-                        "last_login_at", user.getLastLoginAt(),
-                        "created_at", user.getCreatedAt()
-                )
-        );
+        return ResponseEntity.ok(Map.of(
+                "id", user.getId(),
+                "username", user.getUsername(),
+                "email", user.getEmail() != null ? user.getEmail() : "",
+                "role", user.getRole(),
+                "github_id", user.getGithubId(),
+                "created_at", user.getCreatedAt()
+        ));
     }
 }
