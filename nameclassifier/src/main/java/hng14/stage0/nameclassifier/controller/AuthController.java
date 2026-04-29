@@ -38,6 +38,13 @@ public class AuthController {
     @Value("${app.web.client.url}")
     private String webClientUrl;
 
+    private String getCookieDomain() {
+        if (webClientUrl != null && webClientUrl.contains("railway.app")) {
+            return "up.railway.app";
+        }
+        return null; // Localhost uses default domain (null)
+    }
+
     private boolean isSecure() {
         return webClientUrl != null && webClientUrl.startsWith("https");
     }
@@ -108,6 +115,7 @@ public class AuthController {
                     .secure(isSecure()) // true in production HTTPS
                     .sameSite("Lax")
                     .path("/")
+                    .domain(getCookieDomain())
                     .maxAge(Duration.ofMinutes(10))
                     .build();
 
@@ -116,6 +124,7 @@ public class AuthController {
                     .secure(isSecure()) // true in production HTTPS
                     .sameSite("Lax")
                     .path("/")
+                    .domain(getCookieDomain())
                     .maxAge(Duration.ofMinutes(10))
                     .build();
 
@@ -145,6 +154,7 @@ public class AuthController {
                 .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
+                .domain(getCookieDomain())
                 .maxAge(Duration.ofMinutes(3))
                 .build();
 
@@ -153,6 +163,7 @@ public class AuthController {
                 .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
+                .domain(getCookieDomain())
                 .maxAge(Duration.ofMinutes(5))
                 .build();
 
@@ -161,6 +172,7 @@ public class AuthController {
                 .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
+                .domain(getCookieDomain())
                 .maxAge(0)
                 .build();
 
@@ -169,6 +181,7 @@ public class AuthController {
                 .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
+                .domain(getCookieDomain())
                 .maxAge(0)
                 .build();
 
@@ -190,6 +203,7 @@ public class AuthController {
                 .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
+                .domain(getCookieDomain())
                 .maxAge(Duration.ofMinutes(3))
                 .build();
 
@@ -198,6 +212,7 @@ public class AuthController {
                 .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
+                .domain(getCookieDomain())
                 .maxAge(Duration.ofMinutes(5))
                 .build();
 
@@ -216,6 +231,7 @@ public class AuthController {
                 .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
+                .domain(getCookieDomain())
                 .maxAge(0)
                 .build();
 
@@ -224,6 +240,7 @@ public class AuthController {
                 .secure(isSecure())
                 .sameSite("Lax")
                 .path("/")
+                .domain(getCookieDomain())
                 .maxAge(0)
                 .build();
 
