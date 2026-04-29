@@ -12,6 +12,7 @@ import hng14.stage0.nameclassifier.exception.ForbiddenException;
 import hng14.stage0.nameclassifier.service.AuthService;
 import hng14.stage0.nameclassifier.utils.PkceUtil;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -33,6 +34,9 @@ public class AuthController {
         this.appProperties = appProperties;
         this.authService = authService;
     }
+
+    @Value("${app.web.client.url}")
+    private String webClientUrl;
 
     @GetMapping("/auth/github")
     public ResponseEntity<Void> redirectToGitHub(
@@ -169,7 +173,7 @@ public class AuthController {
                 .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
                 .header(HttpHeaders.SET_COOKIE, clearStateCookie.toString())
                 .header(HttpHeaders.SET_COOKIE, clearVerifierCookie.toString())
-                .header(HttpHeaders.LOCATION, "http://localhost:3000/dashboard")
+                .header(HttpHeaders.LOCATION, webClientUrl + "/dashboard")
                 .build();
     }
 
