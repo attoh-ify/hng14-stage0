@@ -118,23 +118,22 @@ public class AuthController {
             @RequestParam String code,
             @RequestParam String state,
             @CookieValue(name = "insighta_oauth_state", required = false) String expectedState,
-            @CookieValue(name = "insighta_code_verifier", required = false) String codeVerifier,
-            HttpServletRequest request
+            @CookieValue(name = "insighta_code_verifier", required = false) String codeVerifier
     ) {
         TokenResponse response = authService.handleGitHubCallback(code, state, expectedState, codeVerifier);
-
-        ResponseCookie access = buildCookie("insighta_access_token", response.accessToken(), Duration.ofMinutes(3), false);
-        ResponseCookie refresh = buildCookie("insighta_refresh_token", response.refreshToken(), Duration.ofMinutes(5), false);
 
         ResponseCookie clearState = buildCookie("insighta_oauth_state", "", Duration.ZERO, true);
         ResponseCookie clearVerifier = buildCookie("insighta_code_verifier", "", Duration.ZERO, true);
 
+        String redirectUrl = UriComponentsBuilder.fromUriString(webClientUrl + "/auth/success")
+                .queryParam("access_token", response.accessToken())
+                .queryParam("refresh_token", response.refreshToken())
+                .build().toUriString();
+
         return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.SET_COOKIE, access.toString())
-                .header(HttpHeaders.SET_COOKIE, refresh.toString())
                 .header(HttpHeaders.SET_COOKIE, clearState.toString())
                 .header(HttpHeaders.SET_COOKIE, clearVerifier.toString())
-                .header(HttpHeaders.LOCATION, webClientUrl + "/dashboard")
+                .header(HttpHeaders.LOCATION, redirectUrl)
                 .build();
     }
 
