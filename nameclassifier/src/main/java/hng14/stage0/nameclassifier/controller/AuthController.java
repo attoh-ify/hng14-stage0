@@ -44,21 +44,15 @@ public class AuthController {
         return webClientUrl != null && webClientUrl.contains("railway.app");
     }
 
-    private String getCookieDomain() {
-        return isProduction() ? ".up.railway.app" : null;
-    }
-
     private ResponseCookie buildCookie(String name, String value, Duration maxAge, boolean isOauthHandshake) {
         String sameSite = isProduction() && isOauthHandshake ? "None" : "Lax";
         boolean secure = isProduction();
-        System.out.println(sameSite + " " + secure + " " + getCookieDomain() + " " + name + " " + value);
 
         return ResponseCookie.from(name, value)
                 .httpOnly(true)
                 .secure(secure)
                 .sameSite(sameSite)
                 .path("/")
-                .domain(getCookieDomain())
                 .maxAge(maxAge)
                 .build();
     }
@@ -107,7 +101,6 @@ public class AuthController {
                 .header(HttpHeaders.LOCATION, githubAuthorizeUri.toString());
 
         if (!isCli) {
-            // Use isOauthHandshake=true for state and verifier
             response.header(HttpHeaders.SET_COOKIE, buildCookie("insighta_oauth_state", finalState, Duration.ofMinutes(10), true).toString());
             response.header(HttpHeaders.SET_COOKIE, buildCookie("insighta_code_verifier", finalCodeVerifier, Duration.ofMinutes(10), true).toString());
         }
@@ -123,20 +116,11 @@ public class AuthController {
             @CookieValue(name = "insighta_code_verifier", required = false) String codeVerifier,
             HttpServletRequest request
     ) {
-        // Debugging logs for production cookie issues
-        if (request.getCookies() != null) {
-            for (Cookie cookie : request.getCookies()) {
-                System.out.println("Inbound Cookie: " + cookie.getName() + " [Domain: " + cookie.getDomain() + "]");
-            }
-        }
-
         TokenResponse response = authService.handleGitHubCallback(code, state, expectedState, codeVerifier);
 
-        // Regular session cookies use Lax
         ResponseCookie access = buildCookie("insighta_access_token", response.accessToken(), Duration.ofMinutes(3), false);
         ResponseCookie refresh = buildCookie("insighta_refresh_token", response.refreshToken(), Duration.ofMinutes(5), false);
 
-        // Cleanup cookies (maxAge 0)
         ResponseCookie clearState = buildCookie("insighta_oauth_state", "", Duration.ZERO, true);
         ResponseCookie clearVerifier = buildCookie("insighta_code_verifier", "", Duration.ZERO, true);
 
