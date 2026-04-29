@@ -11,6 +11,8 @@ import hng14.stage0.nameclassifier.exception.BadRequestException;
 import hng14.stage0.nameclassifier.exception.ForbiddenException;
 import hng14.stage0.nameclassifier.service.AuthService;
 import hng14.stage0.nameclassifier.utils.PkceUtil;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -40,7 +42,7 @@ public class AuthController {
 
     private String getCookieDomain() {
         if (webClientUrl != null && webClientUrl.contains("railway.app")) {
-            return "up.railway.app";
+            return ".up.railway.app";
         }
         return null; // Localhost uses default domain (null)
     }
@@ -140,8 +142,16 @@ public class AuthController {
             @RequestParam String code,
             @RequestParam String state,
             @CookieValue(name = "insighta_oauth_state", required = false) String expectedState,
-            @CookieValue(name = "insighta_code_verifier", required = false) String codeVerifier
+            @CookieValue(name = "insighta_code_verifier", required = false) String codeVerifier,
+            HttpServletRequest request
     ) {
+        // LOG ALL COOKIES TO SEE WHAT IS ACTUALLY ARRIVING
+        if (request.getCookies() != null) {
+            for (Cookie cookie : request.getCookies()) {
+                System.out.println("Cookie Name: " + cookie.getName() + " | Value: " + cookie.getValue());
+            }
+        }
+
         TokenResponse response = authService.handleGitHubCallback(
                 code,
                 state,
