@@ -129,6 +129,7 @@ public class AuthController {
             @CookieValue(name = "insighta_oauth_state", required = false) String expectedState,
             @CookieValue(name = "insighta_code_verifier", required = false) String codeVerifier
     ) {
+        System.out.println("URL: " + webClientUrl + "/dashboard");
         TokenResponse response = authService.handleGitHubCallback(
                 code,
                 state,
