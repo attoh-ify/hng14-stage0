@@ -64,13 +64,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    // Inside getUserKey(HttpServletRequest request)
     private String getUserKey(HttpServletRequest request) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        if (authentication != null && authentication.getPrincipal() instanceof AppUser user) {
+        // Check if authentication exists AND if the principal is actually our User object
+        if (authentication != null &&
+                authentication.isAuthenticated() &&
+                authentication.getPrincipal() instanceof AppUser user) {
             return user.getId();
         }
 
+        // FALLBACK: If not logged in yet, or filter order is wrong, use IP
         return getClientIp(request);
     }
 

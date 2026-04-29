@@ -26,7 +26,9 @@ public class ApiVersionFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/");
+        String path = request.getRequestURI();
+        // Allow any path starting with /auth/ to pass without the version header
+        return !path.startsWith("/api/") || path.startsWith("/auth/");
     }
 
     @Override
