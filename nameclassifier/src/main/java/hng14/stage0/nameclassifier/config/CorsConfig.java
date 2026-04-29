@@ -9,8 +9,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class CorsConfig {
 
-    // Comma-separated list of allowed origins, e.g.:
-    // http://localhost:3000,https://insighta-web-production-00aa.up.railway.app
+    // Set in Railway env vars as a comma-separated list, e.g.:
+    // https://insighta-web-production-00aa.up.railway.app,http://localhost:3000
     @Value("${app.cors.allowed-origins:http://localhost:3000}")
     private String allowedOriginsRaw;
 
@@ -25,7 +25,9 @@ public class CorsConfig {
                 }
 
                 registry.addMapping("/**")
-                        .allowedOrigins(origins)
+                        // allowedOriginPatterns supports credentials AND wildcards.
+                        // We pass the explicit origins from env vars, not "*".
+                        .allowedOriginPatterns(origins)
                         .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
                         .exposedHeaders("Content-Disposition")
