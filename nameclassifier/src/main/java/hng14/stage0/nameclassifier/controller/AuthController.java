@@ -51,6 +51,7 @@ public class AuthController {
     private ResponseCookie buildCookie(String name, String value, Duration maxAge, boolean isOauthHandshake) {
         String sameSite = isProduction() && isOauthHandshake ? "None" : "Lax";
         boolean secure = isProduction();
+        System.out.println(sameSite + " " + secure + " " + getCookieDomain() + " " + name + " " + value);
 
         return ResponseCookie.from(name, value)
                 .httpOnly(true)
