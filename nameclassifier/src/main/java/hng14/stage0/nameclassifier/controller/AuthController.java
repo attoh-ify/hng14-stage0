@@ -48,13 +48,18 @@ public class AuthController {
         String sameSite = isProduction() && isOauthHandshake ? "None" : "Lax";
         boolean secure = isProduction();
 
-        return ResponseCookie.from(name, value)
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(name, value)
                 .httpOnly(true)
                 .secure(secure)
                 .sameSite(sameSite)
                 .path("/")
-                .maxAge(maxAge)
-                .build();
+                .maxAge(maxAge);
+
+        if (isProduction()) {
+            builder.domain(".up.railway.app");
+        }
+
+        return builder.build();
     }
 
     @GetMapping("/auth/github")
