@@ -11,7 +11,7 @@ public class CorsConfig {
 
     // Set in Railway env vars as a comma-separated list, e.g.:
     // https://insighta-web-production-00aa.up.railway.app,http://localhost:3000
-    @Value("${app.cors.allowed-origins:http://localhost:3000}")
+    @Value("${app_cors_allowed_origins:http://localhost:3000}")
     private String allowedOriginsRaw;
 
     @Bean
