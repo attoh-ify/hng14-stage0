@@ -20,27 +20,40 @@ public class GitHubClient {
         this.appProperties = appProperties;
     }
 
-    public GitHubAccessTokenResponse exchangeCodeForToken(String code, String codeVerifier) {
+    public GitHubAccessTokenResponse exchangeCodeForToken(
+            String code,
+            String codeVerifier,
+            String redirectUri,
+            boolean isCli
+    ) {
+        AppProperties.OAuthClient oauthClient = isCli
+                ? appProperties.getCli()
+                : appProperties.getWeb();
+
         LinkedMultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("client_id", appProperties.getClientId());
-        form.add("client_secret", appProperties.getClientSecret());
+        form.add("client_id", oauthClient.getClientId());
+        form.add("client_secret", oauthClient.getClientSecret());
         form.add("code", code);
-        form.add("redirect_uri", appProperties.getRedirectUri());
+        form.add("redirect_uri", redirectUri);
         form.add("code_verifier", codeVerifier);
 
-        GitHubAccessTokenResponse response = restClient.post()
-                .uri("https://github.com/login/oauth/access_token")
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .accept(MediaType.APPLICATION_JSON)
-                .body(form)
-                .retrieve()
-                .body(GitHubAccessTokenResponse.class);
+        try {
+            GitHubAccessTokenResponse response = restClient.post()
+                    .uri("https://github.com/login/oauth/access_token")
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .body(form)
+                    .retrieve()
+                    .body(GitHubAccessTokenResponse.class);
 
-        if (response == null || response.accessToken() == null || response.accessToken().isBlank()) {
+            if (response == null || response.accessToken() == null || response.accessToken().isBlank()) {
+                throw new UpstreamServiceException("GitHub returned an invalid response");
+            }
+
+            return response;
+        } catch (Exception ex) {
             throw new UpstreamServiceException("GitHub returned an invalid response");
         }
-
-        return response;
     }
 
     public GitHubUserResponse fetchUser(String accessToken) {

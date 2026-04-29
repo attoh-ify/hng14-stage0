@@ -1,11 +1,14 @@
 package hng14.stage0.nameclassifier.controller;
 
 import hng14.stage0.nameclassifier.config.AppProperties;
+import hng14.stage0.nameclassifier.dto.payload.GitHubCliCallbackRequest;
 import hng14.stage0.nameclassifier.dto.payload.LogoutRequest;
 import hng14.stage0.nameclassifier.dto.payload.RefreshTokenRequest;
 import hng14.stage0.nameclassifier.dto.response.MessageResponse;
 import hng14.stage0.nameclassifier.dto.response.TokenResponse;
+import hng14.stage0.nameclassifier.entities.AppUser;
 import hng14.stage0.nameclassifier.exception.BadRequestException;
+import hng14.stage0.nameclassifier.exception.ForbiddenException;
 import hng14.stage0.nameclassifier.service.AuthService;
 import hng14.stage0.nameclassifier.utils.PkceUtil;
 import jakarta.validation.Valid;
@@ -13,11 +16,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.Map;
 
 @RestController
 public class AuthController {
@@ -30,51 +35,91 @@ public class AuthController {
     }
 
     @GetMapping("/auth/github")
-    public ResponseEntity<Void> redirectToGitHub() {
-        if (appProperties.getClientId() == null || appProperties.getClientId().isBlank()) {
+    public ResponseEntity<Void> redirectToGitHub(
+            @RequestParam(required = false) String client,
+            @RequestParam(required = false, name = "redirect_uri") String redirectUri,
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false, name = "code_challenge") String codeChallenge
+    ) {
+        boolean isCli = "cli".equalsIgnoreCase(client);
+
+        AppProperties.OAuthClient oauthClient = isCli
+                ? appProperties.getCli()
+                : appProperties.getWeb();
+
+        if (oauthClient.getClientId() == null || oauthClient.getClientId().isBlank()) {
             throw new BadRequestException("GitHub OAuth client ID is not configured");
         }
 
-        String state = PkceUtil.generateState();
-        String codeVerifier = PkceUtil.generateCodeVerifier();
-        String codeChallenge = PkceUtil.generateCodeChallenge(codeVerifier);
+        String finalState;
+        String finalCodeVerifier = null;
+        String finalCodeChallenge;
+        String finalRedirectUri;
+
+        if (isCli) {
+            if (redirectUri == null || redirectUri.isBlank()) {
+                throw new BadRequestException("CLI redirect_uri is required");
+            }
+
+            if (state == null || state.isBlank()) {
+                throw new BadRequestException("CLI state is required");
+            }
+
+            if (codeChallenge == null || codeChallenge.isBlank()) {
+                throw new BadRequestException("CLI code_challenge is required");
+            }
+
+            finalState = state;
+            finalCodeChallenge = codeChallenge;
+            finalRedirectUri = redirectUri;
+        } else {
+            finalState = PkceUtil.generateState();
+            finalCodeVerifier = PkceUtil.generateCodeVerifier();
+            finalCodeChallenge = PkceUtil.generateCodeChallenge(finalCodeVerifier);
+            finalRedirectUri = oauthClient.getRedirectUri();
+        }
 
         URI githubAuthorizeUri = UriComponentsBuilder
                 .fromUriString("https://github.com/login/oauth/authorize")
-                .queryParam("client_id", appProperties.getClientId())
-                .queryParam("redirect_uri", appProperties.getRedirectUri())
+                .queryParam("client_id", oauthClient.getClientId())
+                .queryParam("redirect_uri", finalRedirectUri)
                 .queryParam("scope", appProperties.getScope())
-                .queryParam("state", state)
-                .queryParam("code_challenge", codeChallenge)
+                .queryParam("state", finalState)
+                .queryParam("code_challenge", finalCodeChallenge)
                 .queryParam("code_challenge_method", "S256")
                 .build()
                 .toUri();
 
-        ResponseCookie stateCookie = ResponseCookie.from("insighta_oauth_state", state)
-                .httpOnly(true)
-                .secure(false) // set true in production HTTPS
-                .sameSite("Lax")
-                .path("/")
-                .maxAge(Duration.ofMinutes(10))
-                .build();
+        ResponseEntity.BodyBuilder response = ResponseEntity
+                .status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, githubAuthorizeUri.toString());
 
-        ResponseCookie verifierCookie = ResponseCookie.from("insighta_code_verifier", codeVerifier)
-                .httpOnly(true)
-                .secure(false) // set true in production HTTPS
-                .sameSite("Lax")
-                .path("/")
-                .maxAge(Duration.ofMinutes(10))
-                .build();
+        if (!isCli) {
+            ResponseCookie stateCookie = ResponseCookie.from("insighta_oauth_state", finalState)
+                    .httpOnly(true)
+                    .secure(false) // true in production HTTPS
+                    .sameSite("Lax")
+                    .path("/")
+                    .maxAge(Duration.ofMinutes(10))
+                    .build();
 
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION, githubAuthorizeUri.toString())
-                .header(HttpHeaders.SET_COOKIE, stateCookie.toString())
-                .header(HttpHeaders.SET_COOKIE, verifierCookie.toString())
-                .build();
+            ResponseCookie verifierCookie = ResponseCookie.from("insighta_code_verifier", finalCodeVerifier)
+                    .httpOnly(true)
+                    .secure(false) // true in production HTTPS
+                    .sameSite("Lax")
+                    .path("/")
+                    .maxAge(Duration.ofMinutes(10))
+                    .build();
+
+            response.header(HttpHeaders.SET_COOKIE, stateCookie.toString());
+            response.header(HttpHeaders.SET_COOKIE, verifierCookie.toString());
+        }
+
+        return response.build();
     }
 
     @GetMapping("/auth/github/callback")
-    public ResponseEntity<TokenResponse> handleGitHubCallback(
+    public ResponseEntity<Void> handleGitHubCallback(
             @RequestParam String code,
             @RequestParam String state,
             @CookieValue(name = "insighta_oauth_state", required = false) String expectedState,
@@ -119,12 +164,13 @@ public class AuthController {
                 .maxAge(0)
                 .build();
 
-        return ResponseEntity.ok()
+        return ResponseEntity.status(HttpStatus.FOUND)
                 .header(HttpHeaders.SET_COOKIE, accessCookie.toString())
                 .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
                 .header(HttpHeaders.SET_COOKIE, clearStateCookie.toString())
                 .header(HttpHeaders.SET_COOKIE, clearVerifierCookie.toString())
-                .body(response);
+                .header(HttpHeaders.LOCATION, "http://localhost:3000/dashboard")
+                .build();
     }
 
     @PostMapping("/auth/refresh")
@@ -177,5 +223,41 @@ public class AuthController {
                 .header(HttpHeaders.SET_COOKIE, clearAccessCookie.toString())
                 .header(HttpHeaders.SET_COOKIE, clearRefreshCookie.toString())
                 .body(response);
+    }
+
+    @PostMapping("/auth/github/cli/callback")
+    public ResponseEntity<TokenResponse> handleGitHubCliCallback(
+            @Valid @RequestBody GitHubCliCallbackRequest request
+    ) {
+        TokenResponse response = authService.handleGitHubCliCallback(
+                request.code(),
+                request.state(),
+                request.codeVerifier(),
+                request.redirectUri()
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/auth/me")
+    public ResponseEntity<?> getCurrentUser() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+
+        if (!(principal instanceof AppUser user)) {
+            throw new ForbiddenException("Unauthorized");
+        }
+
+        return ResponseEntity.ok(
+                Map.of(
+                        "id", user.getId(),
+                        "username", user.getUsername(),
+                        "email", user.getEmail() != null ? user.getEmail(): "",
+                        "role", user.getRole(),
+                        "github_id", user.getGithubId(),
+                        "is_active", user.isActive(),
+                        "last_login_at", user.getLastLoginAt(),
+                        "created_at", user.getCreatedAt()
+                )
+        );
     }
 }

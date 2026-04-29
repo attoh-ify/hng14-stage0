@@ -6,33 +6,24 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "github.oauth")
 public class AppProperties {
-    private String clientId;
-    private String clientSecret;
-    private String redirectUri;
+    private OAuthClient web = new OAuthClient();
+    private OAuthClient cli = new OAuthClient();
     private String scope;
 
-    public String getClientId() {
-        return clientId;
+    public OAuthClient getWeb() {
+        return web;
     }
 
-    public void setClientId(String clientId) {
-        this.clientId = clientId;
+    public void setWeb(OAuthClient web) {
+        this.web = web;
     }
 
-    public String getClientSecret() {
-        return clientSecret;
+    public OAuthClient getCli() {
+        return cli;
     }
 
-    public void setClientSecret(String clientSecret) {
-        this.clientSecret = clientSecret;
-    }
-
-    public String getRedirectUri() {
-        return redirectUri;
-    }
-
-    public void setRedirectUri(String redirectUri) {
-        this.redirectUri = redirectUri;
+    public void setCli(OAuthClient cli) {
+        this.cli = cli;
     }
 
     public String getScope() {
@@ -41,5 +32,35 @@ public class AppProperties {
 
     public void setScope(String scope) {
         this.scope = scope;
+    }
+
+    public static class OAuthClient {
+        private String clientId;
+        private String clientSecret;
+        private String redirectUri;
+
+        public String getClientId() {
+            return clientId;
+        }
+
+        public void setClientId(String clientId) {
+            this.clientId = clientId;
+        }
+
+        public String getClientSecret() {
+            return clientSecret;
+        }
+
+        public void setClientSecret(String clientSecret) {
+            this.clientSecret = clientSecret;
+        }
+
+        public String getRedirectUri() {
+            return redirectUri;
+        }
+
+        public void setRedirectUri(String redirectUri) {
+            this.redirectUri = redirectUri;
+        }
     }
 }

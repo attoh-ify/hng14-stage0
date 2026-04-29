@@ -28,6 +28,21 @@ public class AppUser {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
+    @Override
+    public String toString() {
+        return "AppUser{" +
+                "id='" + id + '\'' +
+                ", githubId='" + githubId + '\'' +
+                ", username='" + username + '\'' +
+                ", email='" + email + '\'' +
+                ", avatarUrl='" + avatarUrl + '\'' +
+                ", role=" + role +
+                ", active=" + active +
+                ", lastLoginAt=" + lastLoginAt +
+                ", createdAt=" + createdAt +
+                '}';
+    }
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private UserRole role = UserRole.analyst;

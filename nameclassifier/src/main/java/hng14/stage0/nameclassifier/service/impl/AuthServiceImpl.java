@@ -2,6 +2,7 @@ package hng14.stage0.nameclassifier.service.impl;
 
 import com.github.f4b6a3.uuid.UuidCreator;
 import hng14.stage0.nameclassifier.client.GitHubClient;
+import hng14.stage0.nameclassifier.config.AppProperties;
 import hng14.stage0.nameclassifier.dto.response.GitHubAccessTokenResponse;
 import hng14.stage0.nameclassifier.dto.response.GitHubUserResponse;
 import hng14.stage0.nameclassifier.dto.response.MessageResponse;
@@ -26,17 +27,20 @@ public class AuthServiceImpl implements AuthService {
     private final AppUserRepository appUserRepository;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final AppProperties appProperties;
 
     public AuthServiceImpl(
             GitHubClient gitHubClient,
             AppUserRepository appUserRepository,
             JwtService jwtService,
-            RefreshTokenService refreshTokenService
+            RefreshTokenService refreshTokenService,
+            AppProperties appProperties
     ) {
         this.gitHubClient = gitHubClient;
         this.appUserRepository = appUserRepository;
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
+        this.appProperties = appProperties;
     }
 
     @Override
@@ -59,7 +63,8 @@ public class AuthServiceImpl implements AuthService {
             throw new BadRequestException("Missing PKCE verifier");
         }
 
-        GitHubAccessTokenResponse tokenResponse = gitHubClient.exchangeCodeForToken(code, codeVerifier);
+        GitHubAccessTokenResponse tokenResponse =
+                gitHubClient.exchangeCodeForToken(code, codeVerifier, appProperties.getWeb().getRedirectUri(), false);
         GitHubUserResponse githubUser = gitHubClient.fetchUser(tokenResponse.accessToken());
 
         AppUser user = appUserRepository.findByGithubId(String.valueOf(githubUser.id()))
@@ -87,7 +92,7 @@ public class AuthServiceImpl implements AuthService {
         String accessToken = jwtService.generateAccessToken(savedUser);
         String refreshToken = refreshTokenService.createRefreshToken(savedUser);
 
-        return new TokenResponse("success", accessToken, refreshToken);
+        return new TokenResponse("success", accessToken, refreshToken, savedUser.getUsername());
     }
 
     @Override
@@ -106,7 +111,7 @@ public class AuthServiceImpl implements AuthService {
         String newAccessToken = jwtService.generateAccessToken(user);
         String newRefreshToken = refreshTokenService.createRefreshToken(user);
 
-        return new TokenResponse("success", newAccessToken, newRefreshToken);
+        return new TokenResponse("success", newAccessToken, newRefreshToken, user.getUsername());
     }
 
     @Override
@@ -119,5 +124,62 @@ public class AuthServiceImpl implements AuthService {
         refreshTokenService.revokeByTokenValue(refreshTokenValue);
 
         return new MessageResponse("success", "Logged out successfully");
+    }
+
+    @Override
+    @Transactional
+    public TokenResponse handleGitHubCliCallback(
+            String code,
+            String state,
+            String codeVerifier,
+            String redirectUri
+    ) {
+        if (code == null || code.isBlank()) {
+            throw new BadRequestException("Missing authorization code");
+        }
+
+        if (state == null || state.isBlank()) {
+            throw new BadRequestException("Invalid OAuth state");
+        }
+
+        if (codeVerifier == null || codeVerifier.isBlank()) {
+            throw new BadRequestException("Missing PKCE verifier");
+        }
+
+        if (redirectUri == null || redirectUri.isBlank()) {
+            throw new BadRequestException("Missing redirect URI");
+        }
+
+        GitHubAccessTokenResponse tokenResponse =
+                gitHubClient.exchangeCodeForToken(code, codeVerifier, redirectUri, true);
+
+        GitHubUserResponse githubUser = gitHubClient.fetchUser(tokenResponse.accessToken());
+
+        AppUser user = appUserRepository.findByGithubId(String.valueOf(githubUser.id()))
+                .orElseGet(() -> {
+                    AppUser newUser = new AppUser();
+                    newUser.setId(UuidCreator.getTimeOrderedEpoch().toString());
+                    newUser.setGithubId(String.valueOf(githubUser.id()));
+                    newUser.setCreatedAt(Instant.now());
+                    newUser.setRole(UserRole.analyst);
+                    newUser.setActive(true);
+                    return newUser;
+                });
+
+        user.setUsername(githubUser.login());
+        user.setEmail(githubUser.email());
+        user.setAvatarUrl(githubUser.avatarUrl());
+        user.setLastLoginAt(Instant.now());
+
+        AppUser savedUser = appUserRepository.save(user);
+
+        if (!savedUser.isActive()) {
+            throw new ForbiddenException("User account is inactive");
+        }
+
+        String accessToken = jwtService.generateAccessToken(savedUser);
+        String refreshToken = refreshTokenService.createRefreshToken(savedUser);
+
+        return new TokenResponse("success", accessToken, refreshToken, savedUser.getUsername());
     }
 }
