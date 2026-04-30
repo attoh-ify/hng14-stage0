@@ -13,6 +13,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -31,22 +32,18 @@ public class SecurityConfig {
     ) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                // Enable CORS — uses the CorsConfig bean automatically
-                .cors(cors -> cors.configure(http))
+                // Customizer.withDefaults() tells Spring Security to pick up
+                // the CorsConfigurationSource bean (our CorsConfig) automatically.
+                // Do NOT use cors.configure(http) — that triggers Spring's internal
+                // default CORS config which uses allowedOrigins("*") with credentials,
+                // causing the IllegalArgumentException on every request.
+                .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(auth -> auth
-                        // Public auth endpoints
                         .requestMatchers("/auth/**").permitAll()
-
-                        // OPTIONS preflight — always permit
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                        // Admin only write operations
                         .requestMatchers(HttpMethod.POST, "/api/**").hasRole("admin")
                         .requestMatchers(HttpMethod.DELETE, "/api/**").hasRole("admin")
-
-                        // Admin + analyst read operations
                         .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("admin", "analyst")
-
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(requestLoggingFilter, UsernamePasswordAuthenticationFilter.class)
