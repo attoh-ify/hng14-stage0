@@ -11,9 +11,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -32,11 +32,10 @@ public class SecurityConfig {
     ) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                // Customizer.withDefaults() tells Spring Security to pick up
-                // the CorsConfigurationSource bean (our CorsConfig) automatically.
-                // Do NOT use cors.configure(http) — that triggers Spring's internal
-                // default CORS config which uses allowedOrigins("*") with credentials,
-                // causing the IllegalArgumentException on every request.
+                // Customizer.withDefaults() looks for a CorsConfigurationSource bean
+                // (our CorsConfig) in the context. Do NOT use cors.configure(http) —
+                // that triggers Spring's internal wildcard CORS config which conflicts
+                // with allowCredentials=true and throws IllegalArgumentException.
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/**").permitAll()
