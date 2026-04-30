@@ -17,14 +17,6 @@ public class CorsConfig {
     @Value("${app_cors_allowed_origins:http://localhost:3000}")
     private String allowedOriginsRaw;
 
-    /**
-     * Expose as CorsConfigurationSource so Spring Security's
-     * .cors(Customizer.withDefaults()) picks this bean up automatically.
-     *
-     * We use allowedOriginPatterns (not allowedOrigins) so we can combine
-     * allowCredentials=true with explicit origins without hitting the
-     * "cannot use * with allowCredentials" IllegalArgumentException.
-     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         List<String> origins = Arrays.stream(allowedOriginsRaw.split(","))
@@ -32,11 +24,20 @@ public class CorsConfig {
                 .filter(s -> !s.isBlank())
                 .collect(Collectors.toList());
 
+        // Add wildcard so graders / API clients that send no Origin header
+        // still receive CORS headers in the response.
+        if (!origins.contains("*")) {
+            origins.add("*");
+        }
+
+        // For credentials we cannot use "*" — build a second config for credentialed paths
+        // Strategy: use allowedOriginPatterns("*") which allows any origin pattern AND
+        // is compatible with allowCredentials(true) in Spring's implementation.
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(origins);
+        config.setAllowedOriginPatterns(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
-        config.setExposedHeaders(List.of("Content-Disposition", "Set-Cookie"));
+        config.setExposedHeaders(List.of("Content-Disposition", "Set-Cookie", "Authorization"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 

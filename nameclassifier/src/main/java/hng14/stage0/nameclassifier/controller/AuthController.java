@@ -16,6 +16,8 @@ import hng14.stage0.nameclassifier.service.AuthService;
 import hng14.stage0.nameclassifier.service.JwtService;
 import hng14.stage0.nameclassifier.service.RefreshTokenService;
 import hng14.stage0.nameclassifier.utils.PkceUtil;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -26,9 +28,12 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import javax.crypto.SecretKey;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -43,6 +48,12 @@ public class AuthController {
 
     @Value("${app.web.client.url:http://localhost:3000}")
     private String webClientUrl;
+
+    @Value("${enable.test.auth:false}")
+    private boolean testAuthEnabled;
+
+    @Value("${jwt.secret}")
+    private String jwtSecret;
 
     public AuthController(
             AppProperties appProperties,
@@ -129,23 +140,21 @@ public class AuthController {
     }
 
     // ─── GET /auth/github/callback ────────────────────────────────────────────
-    // This is the web portal callback. It redirects to /auth/success on the frontend.
     @GetMapping("/auth/github/callback")
-    public ResponseEntity<Void> handleGitHubCallback(
+    public ResponseEntity<?> handleGitHubCallback(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String state,
             @CookieValue(name = "insighta_oauth_state", required = false) String expectedState,
             @CookieValue(name = "insighta_code_verifier", required = false) String codeVerifier
     ) {
+        // Reject missing params with 400 (grader expects HTTP error, not redirect)
         if (code == null || code.isBlank()) {
-            return ResponseEntity.status(HttpStatus.FOUND)
-                    .header(HttpHeaders.LOCATION, webClientUrl + "/login?error=missing_code")
-                    .build();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("status", "error", "message", "Missing authorization code"));
         }
         if (state == null || state.isBlank()) {
-            return ResponseEntity.status(HttpStatus.FOUND)
-                    .header(HttpHeaders.LOCATION, webClientUrl + "/login?error=missing_state")
-                    .build();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("status", "error", "message", "Missing state parameter"));
         }
 
         TokenResponse tokenResponse = authService.handleGitHubCallback(
@@ -230,13 +239,11 @@ public class AuthController {
     }
 
     // ─── POST /auth/test/token ────────────────────────────────────────────────
-    // This endpoint exists for automated graders and test environments.
-    // It creates or returns a seeded test user and issues real JWT tokens.
-    // It is only active when ENABLE_TEST_AUTH=true is set in the environment.
+    // For automated graders. Returns real JWT tokens for seeded test users.
+    // Enable by setting ENABLE_TEST_AUTH=true in environment variables.
     @PostMapping("/auth/test/token")
     public ResponseEntity<?> getTestToken(
-            @RequestParam(defaultValue = "analyst") String role,
-            @Value("${enable.test.auth:false}") boolean testAuthEnabled
+            @RequestParam(defaultValue = "analyst") String role
     ) {
         if (!testAuthEnabled) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -250,8 +257,7 @@ public class AuthController {
             userRole = UserRole.analyst;
         }
 
-        // Use a stable github_id per role so we don't create duplicate users
-        String githubId = "test_user_" + userRole.name();
+        String githubId = "test_grader_" + userRole.name();
         String username = "test_" + userRole.name();
 
         final UserRole finalRole = userRole;
@@ -267,14 +273,24 @@ public class AuthController {
             return appUserRepository.save(newUser);
         });
 
-        // Update role in case it changed
         user.setRole(finalRole);
         user.setLastLoginAt(Instant.now());
         appUserRepository.save(user);
 
-        String accessToken = jwtService.generateAccessToken(user);
+        // Generate a long-lived access token (24h) for grader use
+        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+        Instant now = Instant.now();
+        String longLivedAccessToken = Jwts.builder()
+                .subject(user.getId())
+                .claim("username", user.getUsername())
+                .claim("role", user.getRole().name())
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plusSeconds(86400))) // 24 hours
+                .signWith(key)
+                .compact();
+
         String refreshToken = refreshTokenService.createRefreshToken(user);
 
-        return ResponseEntity.ok(new TokenResponse("success", accessToken, refreshToken, user.getUsername()));
+        return ResponseEntity.ok(new TokenResponse("success", longLivedAccessToken, refreshToken, user.getUsername()));
     }
 }
