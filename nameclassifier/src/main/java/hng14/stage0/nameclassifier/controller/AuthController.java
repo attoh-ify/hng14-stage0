@@ -23,6 +23,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestController
@@ -31,7 +32,7 @@ public class AuthController {
     private final AppProperties appProperties;
     private final AuthService authService;
 
-    @Value("${app.web.client.url}")
+    @Value("${app.web.client.url:http://localhost:3000}")
     private String webClientUrl;
 
     public AuthController(AppProperties appProperties, AuthService authService) {
@@ -40,29 +41,28 @@ public class AuthController {
     }
 
     private boolean isProduction() {
-        return webClientUrl != null && (
-                webClientUrl.contains("railway.app") ||
-                        webClientUrl.startsWith("https://")
-        );
+        return webClientUrl != null && webClientUrl.startsWith("https://");
     }
 
+    /**
+     * Build a cookie.
+     * isOauthHandshake=true  → SameSite=None, Secure (must travel through GitHub cross-site redirect)
+     * isOauthHandshake=false → SameSite=Lax, Secure in prod only
+     */
     private ResponseCookie buildCookie(String name, String value, Duration maxAge, boolean isOauthHandshake) {
-        // OAuth handshake cookies (state, verifier) need SameSite=None so the browser
-        // sends them back when GitHub redirects to the backend callback.
-        // Auth tokens use SameSite=Lax which is safe for normal navigation.
+        boolean prod = isProduction();
         String sameSite = isOauthHandshake ? "None" : "Lax";
-        boolean secure = isProduction();
 
-        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(name, value)
+        return ResponseCookie.from(name, value)
                 .httpOnly(true)
-                .secure(secure)
+                .secure(prod || isOauthHandshake) // None requires Secure=true per spec
                 .sameSite(sameSite)
                 .path("/")
-                .maxAge(maxAge);
-
-        return builder.build();
+                .maxAge(maxAge)
+                .build();
     }
 
+    // ─── GET /auth/github ────────────────────────────────────────────────────
     @GetMapping("/auth/github")
     public ResponseEntity<Void> redirectToGitHub(
             @RequestParam(required = false) String client,
@@ -107,8 +107,7 @@ public class AuthController {
                 .header(HttpHeaders.LOCATION, githubAuthorizeUri.toString());
 
         if (!isCli) {
-            // These cookies travel with the user through GitHub and back,
-            // so they MUST be SameSite=None (cross-site redirect).
+            // SameSite=None + Secure so the browser sends these back after GitHub redirect
             response.header(HttpHeaders.SET_COOKIE,
                     buildCookie("insighta_oauth_state", finalState, Duration.ofMinutes(10), true).toString());
             response.header(HttpHeaders.SET_COOKIE,
@@ -118,26 +117,35 @@ public class AuthController {
         return response.build();
     }
 
+    // ─── GET /auth/github/callback ────────────────────────────────────────────
     @GetMapping("/auth/github/callback")
     public ResponseEntity<Void> handleGitHubCallback(
-            @RequestParam String code,
-            @RequestParam String state,
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String state,
             @CookieValue(name = "insighta_oauth_state", required = false) String expectedState,
             @CookieValue(name = "insighta_code_verifier", required = false) String codeVerifier
     ) {
+        if (code == null || code.isBlank()) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, webClientUrl + "/login?error=missing_code")
+                    .build();
+        }
+        if (state == null || state.isBlank()) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, webClientUrl + "/login?error=missing_state")
+                    .build();
+        }
+
         TokenResponse tokenResponse = authService.handleGitHubCallback(
                 code, state, expectedState, codeVerifier
         );
 
-        // Clear the OAuth handshake cookies
+        // Clear OAuth handshake cookies
         ResponseCookie clearState = buildCookie("insighta_oauth_state", "", Duration.ZERO, true);
         ResponseCookie clearVerifier = buildCookie("insighta_code_verifier", "", Duration.ZERO, true);
 
-        // Redirect to /auth/success on the Next.js portal with tokens in the URL.
-        // Next.js will call /api/auth/set-tokens to store them as httpOnly cookies,
-        // then redirect to /dashboard. This is necessary because the backend and
-        // web portal are on different domains in production, so the backend cannot
-        // directly set cookies on the web portal's domain.
+        // Redirect to /auth/success on the portal — tokens go in the URL so
+        // Next.js can pick them up and set its own httpOnly cookies (cross-domain safe)
         String successUrl = UriComponentsBuilder
                 .fromUriString(webClientUrl + "/auth/success")
                 .queryParam("access_token", tokenResponse.accessToken())
@@ -153,18 +161,22 @@ public class AuthController {
                 .build();
     }
 
+    // ─── POST /auth/github/cli/callback ──────────────────────────────────────
     @PostMapping("/auth/github/cli/callback")
     public ResponseEntity<TokenResponse> handleGitHubCliCallback(
             @Valid @RequestBody GitHubCliCallbackRequest request
     ) {
-        return ResponseEntity.ok(authService.handleGitHubCliCallback(
+        TokenResponse response = authService.handleGitHubCliCallback(
                 request.code(), request.state(), request.codeVerifier(), request.redirectUri()
-        ));
+        );
+        return ResponseEntity.ok(response);
     }
 
+    // ─── POST /auth/refresh ───────────────────────────────────────────────────
     @PostMapping("/auth/refresh")
     public ResponseEntity<TokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         TokenResponse response = authService.refresh(request.refreshToken());
+
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE,
                         buildCookie("insighta_access_token", response.accessToken(), Duration.ofMinutes(3), false).toString())
@@ -173,9 +185,11 @@ public class AuthController {
                 .body(response);
     }
 
+    // ─── POST /auth/logout ────────────────────────────────────────────────────
     @PostMapping("/auth/logout")
     public ResponseEntity<MessageResponse> logout(@Valid @RequestBody LogoutRequest request) {
         MessageResponse response = authService.logout(request.refreshToken());
+
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE,
                         buildCookie("insighta_access_token", "", Duration.ZERO, false).toString())
@@ -184,25 +198,28 @@ public class AuthController {
                 .body(response);
     }
 
+    // ─── GET /auth/me ─────────────────────────────────────────────────────────
     @GetMapping("/auth/me")
     public ResponseEntity<?> getCurrentUser() {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         if (!(principal instanceof AppUser user)) throw new ForbiddenException("Unauthorized");
 
-        // Return { status, data: { ...user } } shape expected by the web portal and CLI
-        return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "data", Map.of(
-                        "id", user.getId(),
-                        "username", user.getUsername(),
-                        "email", user.getEmail() != null ? user.getEmail() : "",
-                        "avatar_url", user.getAvatarUrl() != null ? user.getAvatarUrl() : "",
-                        "role", user.getRole(),
-                        "github_id", user.getGithubId(),
-                        "is_active", user.isActive(),
-                        "last_login_at", user.getLastLoginAt() != null ? user.getLastLoginAt().toString() : "",
-                        "created_at", user.getCreatedAt().toString()
-                )
-        ));
+        // Use LinkedHashMap to preserve key order in JSON
+        Map<String, Object> userData = new LinkedHashMap<>();
+        userData.put("id", user.getId());
+        userData.put("username", user.getUsername());
+        userData.put("email", user.getEmail() != null ? user.getEmail() : "");
+        userData.put("avatar_url", user.getAvatarUrl() != null ? user.getAvatarUrl() : "");
+        userData.put("role", user.getRole());
+        userData.put("github_id", user.getGithubId());
+        userData.put("is_active", user.isActive());
+        userData.put("last_login_at", user.getLastLoginAt() != null ? user.getLastLoginAt().toString() : "");
+        userData.put("created_at", user.getCreatedAt().toString());
+
+        Map<String, Object> responseBody = new LinkedHashMap<>();
+        responseBody.put("status", "success");
+        responseBody.put("data", userData);
+
+        return ResponseEntity.ok(responseBody);
     }
 }

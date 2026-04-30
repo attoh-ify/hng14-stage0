@@ -19,6 +19,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
@@ -30,15 +31,20 @@ public class SecurityConfig {
     ) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                .cors(cors -> {})
+                // Enable CORS — uses the CorsConfig bean automatically
+                .cors(cors -> cors.configure(http))
                 .authorizeHttpRequests(auth -> auth
+                        // Public auth endpoints
                         .requestMatchers("/auth/**").permitAll()
 
-                        // admin only
+                        // OPTIONS preflight — always permit
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // Admin only write operations
                         .requestMatchers(HttpMethod.POST, "/api/**").hasRole("admin")
                         .requestMatchers(HttpMethod.DELETE, "/api/**").hasRole("admin")
 
-                        // admin + analyst
+                        // Admin + analyst read operations
                         .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("admin", "analyst")
 
                         .anyRequest().authenticated()
