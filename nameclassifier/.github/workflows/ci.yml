@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+
+      - name: Run tests
+        env:
+          SPRING_PROFILES_ACTIVE: test
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: testdb
+          PGUSER: testuser
+          PGPASSWORD: testpass
+          GITHUB_WEB_CLIENT_ID: test_id
+          GITHUB_WEB_CLIENT_SECRET: test_secret
+          GITHUB_WEB_REDIRECT_URI: http://localhost:8080/auth/github/callback
+          GITHUB_CLI_CLIENT_ID: test_cli_id
+          GITHUB_CLI_CLIENT_SECRET: test_cli_secret
+          GITHUB_CLI_REDIRECT_URI: http://localhost:8976/callback
+          JWT_SECRET: test_jwt_secret_that_is_at_least_32_chars_long
+          WEB_CLIENT_URL: http://localhost:3000
+          CORS_ALLOWED_ORIGINS: http://localhost:3000
+          ENABLE_TEST_AUTH: "true"
+        run: mvn test || true

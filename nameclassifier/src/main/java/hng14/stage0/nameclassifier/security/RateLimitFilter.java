@@ -35,14 +35,24 @@ public class RateLimitFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         String path = request.getRequestURI();
+        String method = request.getMethod();
+
+        // Don't rate-limit OPTIONS preflight requests
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         int limit;
         String key;
 
         if (path.startsWith("/auth/")) {
+            // Auth endpoints: 10 req/min per IP — matches TRD spec
+            // /auth/github is a redirect (no payload), still rate-limited per spec
             limit = 10;
             key = "auth:" + getClientIp(request);
         } else {
+            // All other endpoints: 60 req/min per user
             limit = 60;
             key = "user:" + getUserKey(request);
         }
@@ -53,10 +63,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
             response.setStatus(429);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setCharacterEncoding("UTF-8");
-
             objectMapper.writeValue(
                     response.getWriter(),
-                    new ErrorResponse("error", "Too many requests")
+                    new ErrorResponse("error", "Too many requests. Please try again later.")
             );
             return;
         }
@@ -64,28 +73,21 @@ public class RateLimitFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    // Inside getUserKey(HttpServletRequest request)
     private String getUserKey(HttpServletRequest request) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        // Check if authentication exists AND if the principal is actually our User object
-        if (authentication != null &&
-                authentication.isAuthenticated() &&
-                authentication.getPrincipal() instanceof AppUser user) {
+        if (authentication != null
+                && authentication.isAuthenticated()
+                && authentication.getPrincipal() instanceof AppUser user) {
             return user.getId();
         }
-
-        // FALLBACK: If not logged in yet, or filter order is wrong, use IP
         return getClientIp(request);
     }
 
     private String getClientIp(HttpServletRequest request) {
         String forwardedFor = request.getHeader("X-Forwarded-For");
-
         if (forwardedFor != null && !forwardedFor.isBlank()) {
             return forwardedFor.split(",")[0].trim();
         }
-
         return request.getRemoteAddr();
     }
 }

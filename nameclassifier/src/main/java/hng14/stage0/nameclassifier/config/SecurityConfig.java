@@ -32,17 +32,22 @@ public class SecurityConfig {
     ) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                // Customizer.withDefaults() looks for a CorsConfigurationSource bean
-                // (our CorsConfig) in the context. Do NOT use cors.configure(http) —
-                // that triggers Spring's internal wildcard CORS config which conflicts
-                // with allowCredentials=true and throws IllegalArgumentException.
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(auth -> auth
+                        // Public endpoints
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // /api/users/me — accessible to any authenticated user (admin or analyst)
+                        .requestMatchers(HttpMethod.GET, "/api/users/me").hasAnyRole("admin", "analyst")
+
+                        // Profile write operations — admin only
                         .requestMatchers(HttpMethod.POST, "/api/**").hasRole("admin")
                         .requestMatchers(HttpMethod.DELETE, "/api/**").hasRole("admin")
+
+                        // Profile read operations — admin + analyst
                         .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("admin", "analyst")
+
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(requestLoggingFilter, UsernamePasswordAuthenticationFilter.class)
